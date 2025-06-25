@@ -1,1 +1,827 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ корзины покупок</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .control-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.18);
+            height: fit-content;
+        }
+
+        .results-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.18);
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section h3 {
+            color: #4c63d2;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 15px 20px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .file-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .file-status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .file-status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .file-status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .parameter-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .input-group label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        .input-group input {
+            padding: 10px 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .analyze-button {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .analyze-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(40, 167, 69, 0.4);
+        }
+
+        .analyze-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .rules-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e1e5e9;
+            border-radius: 12px;
+            padding: 15px;
+        }
+
+        .rule-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .rule-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .rule-header {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+
+        .rule-arrow {
+            color: #667eea;
+            font-weight: bold;
+            margin: 0 10px;
+        }
+
+        .rule-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            font-size: 0.85rem;
+            margin-top: 8px;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 5px;
+            background: white;
+            border-radius: 4px;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .export-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e1e5e9;
+        }
+
+        .export-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .export-button {
+            background: linear-gradient(45deg, #17a2b8, #138496);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .export-button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(23, 162, 184, 0.4);
+        }
+
+        .export-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .chart-container {
+            margin-top: 25px;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e1e5e9;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .no-data {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .parameter-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛒 Анализ корзины покупок</h1>
+            <p>Анализ ассоциативных правил для выявления закономерностей в покупках</p>
+        </div>
+
+        <div class="main-content">
+            <div class="control-panel">
+                <div class="section">
+                    <h3>📂 Загрузка данных</h3>
+                    <div class="file-upload">
+                        <input type="file" id="csvFile" class="file-input" accept=".csv" />
+                        <button class="file-button">
+                            <span>📁</span>
+                            Выберите CSV файл
+                        </button>
+                    </div>
+                    <div id="fileStatus" class="file-status" style="display: none;"></div>
+                </div>
+
+                <div class="section">
+                    <h3>⚙️ Параметры алгоритма</h3>
+                    <div class="parameter-group">
+                        <div class="input-group">
+                            <label for="minSupport">Мин. поддержка</label>
+                            <input type="number" id="minSupport" value="0.01" min="0.001" max="1" step="0.001" />
+                        </div>
+                        <div class="input-group">
+                            <label for="minConfidence">Мин. достоверность</label>
+                            <input type="number" id="minConfidence" value="0.1" min="0.01" max="1" step="0.01" />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="maxRules">Макс. правил</label>
+                        <input type="number" id="maxRules" value="100" min="1" max="1000" />
+                    </div>
+                </div>
+
+                <div class="section">
+                    <button id="analyzeButton" class="analyze-button" disabled>
+                        Анализировать
+                    </button>
+                </div>
+            </div>
+
+            <div class="results-panel">
+                <div class="section">
+                    <h3>📊 Статистика</h3>
+                    <div id="stats" class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalTransactions">-</div>
+                            <div class="stat-label">Транзакций</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="uniqueItems">-</div>
+                            <div class="stat-label">Товаров</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="rulesFound">-</div>
+                            <div class="stat-label">Правил</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="avgBasketSize">-</div>
+                            <div class="stat-label">Ср. размер корзины</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🔍 Ассоциативные правила</h3>
+                    <div id="rulesContainer" class="rules-container">
+                        <div class="no-data">Загрузите данные и запустите анализ</div>
+                    </div>
+                </div>
+
+                <div class="export-section">
+                    <h3>💾 Экспорт результатов</h3>
+                    <div class="export-buttons">
+                        <button id="exportCsv" class="export-button" disabled>CSV</button>
+                        <button id="exportJson" class="export-button" disabled>JSON</button>
+                        <button id="exportExcel" class="export-button" disabled>Excel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h3>📈 Визуализация правил</h3>
+            <div id="chartContainer" style="height: 400px;">
+                <div class="no-data">Данные для визуализации отсутствуют</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class MarketBasketAnalyzer {
+            constructor() {
+                this.data = null;
+                this.transactions = [];
+                this.rules = [];
+                this.initEventListeners();
+            }
+
+            initEventListeners() {
+                document.getElementById('csvFile').addEventListener('change', this.handleFileUpload.bind(this));
+                document.getElementById('analyzeButton').addEventListener('click', this.performAnalysis.bind(this));
+                document.getElementById('exportCsv').addEventListener('click', () => this.exportResults('csv'));
+                document.getElementById('exportJson').addEventListener('click', () => this.exportResults('json'));
+                document.getElementById('exportExcel').addEventListener('click', () => this.exportResults('excel'));
+            }
+
+            handleFileUpload(event) {
+                const file = event.target.files[0];
+                const statusDiv = document.getElementById('fileStatus');
+                const analyzeButton = document.getElementById('analyzeButton');
+
+                if (!file) {
+                    statusDiv.style.display = 'none';
+                    analyzeButton.disabled = true;
+                    return;
+                }
+
+                if (!file.name.toLowerCase().endsWith('.csv')) {
+                    this.showStatus('Пожалуйста, выберите CSV файл', 'error');
+                    analyzeButton.disabled = true;
+                    return;
+                }
+
+                if (file.size > 100 * 1024 * 1024) {
+                    this.showStatus('Файл слишком большой (максимум 100MB)', 'error');
+                    analyzeButton.disabled = true;
+                    return;
+                }
+
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        if (results.errors.length > 0) {
+                            this.showStatus('Ошибка при чтении файла: ' + results.errors[0].message, 'error');
+                            analyzeButton.disabled = true;
+                            return;
+                        }
+
+                        this.data = results.data;
+                        if (this.validateData()) {
+                            this.showStatus(`Файл загружен успешно (${this.data.length} записей)`, 'success');
+                            analyzeButton.disabled = false;
+                        }
+                    },
+                    error: (error) => {
+                        this.showStatus('Ошибка при чтении файла: ' + error.message, 'error');
+                        analyzeButton.disabled = true;
+                    }
+                });
+            }
+
+            validateData() {
+                const requiredColumns = ['InvoiceNo', 'StockCode', 'Description', 'Quantity', 'CustomerID'];
+                const columns = Object.keys(this.data[0] || {});
+                
+                const missingColumns = requiredColumns.filter(col => !columns.includes(col));
+                if (missingColumns.length > 0) {
+                    this.showStatus(`Отсутствуют колонки: ${missingColumns.join(', ')}`, 'error');
+                    return false;
+                }
+
+                return true;
+            }
+
+            showStatus(message, type) {
+                const statusDiv = document.getElementById('fileStatus');
+                statusDiv.textContent = message;
+                statusDiv.className = `file-status ${type}`;
+                statusDiv.style.display = 'block';
+            }
+
+            performAnalysis() {
+                if (!this.data) return;
+
+                this.showLoading(true);
+                
+                setTimeout(() => {
+                    try {
+                        this.preprocessData();
+                        this.generateAssociationRules();
+                        this.updateUI();
+                        this.createVisualization();
+                        this.showLoading(false);
+                    } catch (error) {
+                        console.error('Analysis error:', error);
+                        this.showStatus('Ошибка при анализе данных', 'error');
+                        this.showLoading(false);
+                    }
+                }, 100);
+            }
+
+            preprocessData() {
+                // Группировка по InvoiceNo для создания транзакций
+                const invoiceGroups = {};
+                
+                this.data.forEach(row => {
+                    const invoiceNo = row.InvoiceNo;
+                    const description = row.Description;
+                    
+                    if (!invoiceNo || !description) return;
+                    
+                    if (!invoiceGroups[invoiceNo]) {
+                        invoiceGroups[invoiceNo] = new Set();
+                    }
+                    invoiceGroups[invoiceNo].add(description.trim());
+                });
+
+                // Преобразование в массив транзакций
+                this.transactions = Object.values(invoiceGroups)
+                    .map(items => Array.from(items))
+                    .filter(transaction => transaction.length > 1); // Только транзакции с более чем одним товаром
+            }
+
+            generateAssociationRules() {
+                const minSupport = parseFloat(document.getElementById('minSupport').value);
+                const minConfidence = parseFloat(document.getElementById('minConfidence').value);
+                const maxRules = parseInt(document.getElementById('maxRules').value);
+
+                // Получение всех уникальных товаров
+                const allItems = new Set();
+                this.transactions.forEach(transaction => {
+                    transaction.forEach(item => allItems.add(item));
+                });
+
+                const itemArray = Array.from(allItems);
+                const totalTransactions = this.transactions.length;
+
+                // Вычисление поддержки для отдельных товаров
+                const itemSupport = {};
+                itemArray.forEach(item => {
+                    const count = this.transactions.filter(transaction => 
+                        transaction.includes(item)
+                    ).length;
+                    itemSupport[item] = count / totalTransactions;
+                });
+
+                // Генерация правил для пар товаров
+                this.rules = [];
+                
+                for (let i = 0; i < itemArray.length; i++) {
+                    for (let j = i + 1; j < itemArray.length; j++) {
+                        const itemA = itemArray[i];
+                        const itemB = itemArray[j];
+
+                        // Подсчет совместной поддержки
+                        const jointCount = this.transactions.filter(transaction =>
+                            transaction.includes(itemA) && transaction.includes(itemB)
+                        ).length;
+                        
+                        const jointSupport = jointCount / totalTransactions;
+                        
+                        if (jointSupport >= minSupport) {
+                            // Правило A -> B
+                            const confidenceAB = jointSupport / itemSupport[itemA];
+                            if (confidenceAB >= minConfidence) {
+                                const liftAB = confidenceAB / itemSupport[itemB];
+                                const convictionAB = (1 - itemSupport[itemB]) / (1 - confidenceAB);
+                                
+                                this.rules.push({
+                                    antecedents: [itemA],
+                                    consequents: [itemB],
+                                    support: parseFloat(jointSupport.toFixed(4)),
+                                    confidence: parseFloat(confidenceAB.toFixed(4)),
+                                    lift: parseFloat(liftAB.toFixed(4)),
+                                    conviction: parseFloat(convictionAB.toFixed(4))
+                                });
+                            }
+
+                            // Правило B -> A
+                            const confidenceBA = jointSupport / itemSupport[itemB];
+                            if (confidenceBA >= minConfidence) {
+                                const liftBA = confidenceBA / itemSupport[itemA];
+                                const convictionBA = (1 - itemSupport[itemA]) / (1 - confidenceBA);
+                                
+                                this.rules.push({
+                                    antecedents: [itemB],
+                                    consequents: [itemA],
+                                    support: parseFloat(jointSupport.toFixed(4)),
+                                    confidence: parseFloat(confidenceBA.toFixed(4)),
+                                    lift: parseFloat(liftBA.toFixed(4)),
+                                    conviction: parseFloat(convictionBA.toFixed(4))
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Сортировка по lift и ограничение количества
+                this.rules.sort((a, b) => b.lift - a.lift);
+                this.rules = this.rules.slice(0, maxRules);
+            }
+
+            updateUI() {
+                // Обновление статистики
+                document.getElementById('totalTransactions').textContent = this.transactions.length;
+                
+                const uniqueItems = new Set();
+                this.transactions.forEach(transaction => {
+                    transaction.forEach(item => uniqueItems.add(item));
+                });
+                document.getElementById('uniqueItems').textContent = uniqueItems.size;
+                
+                document.getElementById('rulesFound').textContent = this.rules.length;
+                
+                const avgBasketSize = this.transactions.reduce((sum, t) => sum + t.length, 0) / this.transactions.length;
+                document.getElementById('avgBasketSize').textContent = avgBasketSize.toFixed(1);
+
+                // Обновление списка правил
+                this.updateRulesDisplay();
+
+                // Включение кнопок экспорта
+                ['exportCsv', 'exportJson', 'exportExcel'].forEach(id => {
+                    document.getElementById(id).disabled = false;
+                });
+            }
+
+            updateRulesDisplay() {
+                const container = document.getElementById('rulesContainer');
+                
+                if (this.rules.length === 0) {
+                    container.innerHTML = '<div class="no-data">Правила не найдены с текущими параметрами</div>';
+                    return;
+                }
+
+                container.innerHTML = this.rules.map(rule => `
+                    <div class="rule-item">
+                        <div class="rule-header">
+                            ${rule.antecedents.join(', ')}
+                            <span class="rule-arrow">→</span>
+                            ${rule.consequents.join(', ')}
+                        </div>
+                        <div class="rule-metrics">
+                            <div class="metric">
+                                <div class="metric-value">${rule.support}</div>
+                                <div>Поддержка</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${rule.confidence}</div>
+                                <div>Достоверность</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${rule.lift}</div>
+                                <div>Лифт</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">${rule.conviction}</div>
+                                <div>Убежденность</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            createVisualization() {
+                if (this.rules.length === 0) return;
+
+                const trace = {
+                    x: this.rules.map(rule => rule.support),
+                    y: this.rules.map(rule => rule.confidence),
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: {
+                        size: this.rules.map(rule => rule.lift * 5),
+                        color: this.rules.map(rule => rule.lift),
+                        colorscale: 'Viridis',
+                        showscale: true,
+                        colorbar: {
+                            title: 'Лифт'
+                        }
+                    },
+                    text: this.rules.map(rule => 
+                        `${rule.antecedents.join(', ')} → ${rule.consequents.join(', ')}<br>` +
+                        `Поддержка: ${rule.support}<br>` +
+                        `Достоверность: ${rule.confidence}<br>` +
+                        `Лифт: ${rule.lift}`
+                    ),
+                    hovertemplate: '%{text}<extra></extra>'
+                };
+
+                const layout = {
+                    title: 'Карта ассоциативных правил',
+                    xaxis: {
+                        title: 'Поддержка',
+                        showgrid: true
+                    },
+                    yaxis: {
+                        title: 'Достоверность',
+                        showgrid: true
+                    },
+                    hovermode: 'closest',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    paper_bgcolor: 'rgba(0,0,0,0)'
+                };
+
+                Plotly.newPlot('chartContainer', [trace], layout, {responsive: true});
+            }
+
+            exportResults(format) {
+                if (this.rules.length === 0) return;
+
+                let content, filename, mimeType;
+
+                switch (format) {
+                    case 'csv':
+                        const csvHeader = 'Antecedents,Consequents,Support,Confidence,Lift,Conviction\n';
+                        const csvRows = this.rules.map(rule => 
+                            `"${rule.antecedents.join('; ')}","${rule.consequents.join('; ')}",${rule.support},${rule.confidence},${rule.lift},${rule.conviction}`
+                        ).join('\n');
+                        content = csvHeader + csvRows;
+                        filename = 'association_rules.csv';
+                        mimeType = 'text/csv';
+                        break;
+
+                    case 'json':
+                        content = JSON.stringify({rules: this.rules}, null, 2);
+                        filename = 'association_rules.json';
+                        mimeType = 'application/json';
+                        break;
+
+                    case 'excel':
+                        // Для упрощения экспортируем как CSV с расширением .xls
+                        const excelHeader = 'Antecedents\tConsequents\tSupport\tConfidence\tLift\tConviction\n';
+                        const excelRows = this.rules.map(rule => 
+                            `${rule.antecedents.join('; ')}\t${rule.consequents.join('; ')}\t${rule.support}\t${rule.confidence}\t${rule.lift}\t${rule.conviction}`
+                        ).join('\n');
+                        content = excelHeader + excelRows;
+                        filename = 'association_rules.xls';
+                        mimeType = 'application/vnd.ms-excel';
+                        break;
+                }
+
+                const blob = new Blob([content], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+
+            showLoading(show) {
+                const button = document.getElementById('analyzeButton');
+                if (show) {
+                    button.innerHTML = '<div class="loading"><div class="spinner"></div>Анализ...</div>';
+                    button.disabled = true;
+                } else {
+                    button.innerHTML = 'Анализировать';
+                    button.disabled = false;
+                }
+            }
+        }
+
+        // Инициализация приложения
+        document.addEventListener('DOMContentLoaded', () => {
+            new MarketBasketAnalyzer();
+        });
+    </script>
+</body>
+</html>
